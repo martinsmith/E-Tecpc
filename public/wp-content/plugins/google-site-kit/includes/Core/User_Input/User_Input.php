@@ -10,9 +10,14 @@
 
 namespace Google\Site_Kit\Core\User_Input;
 
+use ArrayAccess;
 use Google\Site_Kit\Context;
+use Google\Site_Kit\Core\Key_Metrics\Key_Metrics_Setup_Completed_By;
 use Google\Site_Kit\Core\Storage\Options;
 use Google\Site_Kit\Core\Storage\User_Options;
+use Google\Site_Kit\Core\Tracking\Feature_Metrics_Trait;
+use Google\Site_Kit\Core\Tracking\Provides_Feature_Metrics;
+use Google\Site_Kit\Core\User_Surveys\Survey_Queue;
 use WP_Error;
 use WP_User;
 
@@ -23,7 +28,9 @@ use WP_User;
  * @access private
  * @ignore
  */
-class User_Input {
+class User_Input implements Provides_Feature_Metrics {
+
+	use Feature_Metrics_Trait;
 
 	/**
 	 * Site_Specific_Answers instance.
@@ -64,14 +71,17 @@ class User_Input {
 	 * @var array|ArrayAccess
 	 */
 	private static $questions = array(
-		'purpose'       => array(
+		'purpose'                 => array(
 			'scope' => 'site',
 		),
-		'postFrequency' => array(
+		'postFrequency'           => array(
 			'scope' => 'user',
 		),
-		'goals'         => array(
+		'goals'                   => array(
 			'scope' => 'user',
+		),
+		'includeConversionEvents' => array(
+			'scope' => 'site',
 		),
 	);
 
@@ -83,16 +93,22 @@ class User_Input {
 	 * @param Context      $context         Plugin context.
 	 * @param Options      $options         Optional. Options instance. Default a new instance.
 	 * @param User_Options $user_options    Optional. User_Options instance. Default a new instance.
+	 * @param Survey_Queue $survey_queue    Optional. Survey_Queue instance. Default a new instance.
 	 */
 	public function __construct(
 		Context $context,
-		Options $options = null,
-		User_Options $user_options = null
+		?Options $options = null,
+		?User_Options $user_options = null,
+		?Survey_Queue $survey_queue = null
 	) {
 		$this->site_specific_answers = new Site_Specific_Answers( $options ?: new Options( $context ) );
 		$this->user_options          = $user_options ?: new User_Options( $context );
 		$this->user_specific_answers = new User_Specific_Answers( $this->user_options );
-		$this->rest_controller       = new REST_User_Input_Controller( $this );
+		$this->rest_controller       = new REST_User_Input_Controller(
+			$this,
+			$survey_queue ?: new Survey_Queue( $this->user_options ),
+			new Key_Metrics_Setup_Completed_By( $options ?: new Options( $context ) )
+		);
 	}
 
 	/**
@@ -104,6 +120,7 @@ class User_Input {
 		$this->site_specific_answers->register();
 		$this->user_specific_answers->register();
 		$this->rest_controller->register();
+		$this->register_feature_metrics();
 	}
 
 	/**
@@ -114,7 +131,7 @@ class User_Input {
 	 * @return array The user input questions.
 	 */
 	public static function get_questions() {
-		return static::$questions;
+		return self::$questions;
 	}
 
 	/**
@@ -125,7 +142,7 @@ class User_Input {
 	 * @return array|WP_Error User input answers.
 	 */
 	public function get_answers() {
-		$questions    = static::$questions;
+		$questions    = self::$questions;
 		$site_answers = $this->site_specific_answers->get();
 		$user_answers = $this->user_specific_answers->get();
 
@@ -152,7 +169,6 @@ class User_Input {
 			}
 
 			$answered_by = intval( $setting['answeredBy'] );
-			unset( $setting['answeredBy'] );
 
 			if ( ! $answered_by || $answered_by === $this->user_options->get_user_id() ) {
 				continue;
@@ -192,6 +208,12 @@ class User_Input {
 			}
 		}
 
+		// Conversion events may be empty during setup if no events have been detected.
+		// Since this setting does not affect whether user input is considered "set up",
+		// we are excluding it from this check. It relates to user input initially being
+		// set up with detected events or events added later.
+		unset( $settings['includeConversionEvents'] );
+
 		foreach ( $settings as $setting ) {
 			if ( empty( $setting['values'] ) ) {
 				return true;
@@ -216,11 +238,34 @@ class User_Input {
 		foreach ( $settings as $setting_key => $answers ) {
 			$setting_data           = array();
 			$setting_data['values'] = $answers;
-			$setting_data['scope']  = static::$questions[ $setting_key ]['scope'];
+			$setting_data['scope']  = self::$questions[ $setting_key ]['scope'];
 
 			if ( 'site' === $setting_data['scope'] ) {
-				$setting_data['answeredBy']    = $this->user_options->get_user_id();
+				$existing_answers = $this->get_answers();
+				$answered_by      = $this->user_options->get_user_id();
+
+				if (
+					// If the answer to the "purpose" question changed,
+					// attribute the answer to the current user changing the
+					// answer.
+					(
+						! empty( $existing_answers['purpose']['values'] ) &&
+						! empty( array_diff( $existing_answers['purpose']['values'], $answers ) )
+					) ||
+					// If the answer to the "purpose" question was empty,
+					// attribute the answer to the current user.
+					empty( $existing_answers['purpose']['answeredBy'] )
+				) {
+					$answered_by = $this->user_options->get_user_id();
+				} else {
+					// Otherwise, attribute the answer to the user who answered
+					// the question previously.
+					$answered_by = $existing_answers['purpose']['answeredBy'];
+				}
+
+				$setting_data['answeredBy']    = $answered_by;
 				$site_settings[ $setting_key ] = $setting_data;
+
 			} elseif ( 'user' === $setting_data['scope'] ) {
 				$user_settings[ $setting_key ] = $setting_data;
 			}
@@ -230,5 +275,18 @@ class User_Input {
 		$this->user_specific_answers->set( $user_settings );
 
 		return $this->get_answers();
+	}
+
+	/**
+	 * Gets an array of internal feature metrics.
+	 *
+	 * @since 1.163.0
+	 *
+	 * @return array
+	 */
+	public function get_feature_metrics() {
+		return array(
+			'site_purpose' => $this->site_specific_answers->get()['purpose']['values'] ?? array(),
+		);
 	}
 }

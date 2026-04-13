@@ -23,6 +23,7 @@ use Google\Site_Kit\Core\REST_API\Data_Request;
 use Google\Site_Kit\Core\Util\Exit_Handler;
 use Google\Site_Kit\Core\Util\Google_URL_Matcher_Trait;
 use Google\Site_Kit\Core\Util\Method_Proxy_Trait;
+use Google\Site_Kit\Core\Util\URL;
 use Google\Site_Kit_Dependencies\Google\Service\Exception as Google_Service_Exception;
 use Google\Site_Kit_Dependencies\Google\Service\SiteVerification as Google_Service_SiteVerification;
 use Google\Site_Kit_Dependencies\Google\Service\SiteVerification\SiteVerificationWebResourceGettokenRequest as Google_Service_SiteVerification_SiteVerificationWebResourceGettokenRequest;
@@ -80,7 +81,7 @@ final class Site_Verification extends Module implements Module_With_Scopes {
 			2
 		);
 
-		$print_site_verification_meta = function() {
+		$print_site_verification_meta = function () {
 			$this->print_site_verification_meta();
 		};
 
@@ -89,7 +90,7 @@ final class Site_Verification extends Module implements Module_With_Scopes {
 
 		add_action(
 			'googlesitekit_authorize_user',
-			function() {
+			function () {
 				if ( ! $this->authentication->credentials()->using_proxy() ) {
 					return;
 				}
@@ -172,7 +173,7 @@ final class Site_Verification extends Module implements Module_With_Scopes {
 					return new WP_Error( 'missing_required_param', sprintf( __( 'Request parameter is empty: %s.', 'google-site-kit' ), 'siteURL' ), array( 'status' => 400 ) );
 				}
 
-				return function() use ( $data ) {
+				return function () use ( $data ) {
 					$current_user = wp_get_current_user();
 
 					if ( ! $current_user || ! $current_user->exists() ) {
@@ -203,7 +204,7 @@ final class Site_Verification extends Module implements Module_With_Scopes {
 						$restore_defer = $this->with_client_defer( false );
 						$errors        = new WP_Error();
 
-						foreach ( $this->permute_site_url( $data['siteURL'] ) as $url ) {
+						foreach ( URL::permute_site_url( $data['siteURL'] ) as $url ) {
 							$site = new Google_Service_SiteVerification_SiteVerificationWebResourceResourceSite();
 							$site->setType( 'SITE' );
 							$site->setIdentifier( $url );
@@ -247,7 +248,7 @@ final class Site_Verification extends Module implements Module_With_Scopes {
 				$existing_token = $this->authentication->verification_meta()->get();
 
 				if ( ! empty( $existing_token ) ) {
-					return function() use ( $existing_token ) {
+					return function () use ( $existing_token ) {
 						return array(
 							'method' => 'META',
 							'token'  => $existing_token,

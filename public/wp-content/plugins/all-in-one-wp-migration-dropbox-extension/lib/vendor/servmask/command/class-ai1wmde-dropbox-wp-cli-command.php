@@ -48,7 +48,7 @@ if ( defined( 'WP_CLI' ) && class_exists( 'Ai1wm_Backup_WP_CLI_Base' ) ) {
 		 *
 		 * ## OPTIONS
 		 *
-		 * [--sites]
+		 * [--sites[=<comma_separated_ids>]]
 		 * : Export sites by id (Multisite only). To list sites use: wp site list --fields=blog_id,url
 		 *
 		 * [--password[=<password>]]
@@ -84,8 +84,11 @@ if ( defined( 'WP_CLI' ) && class_exists( 'Ai1wm_Backup_WP_CLI_Base' ) ) {
 		 * [--exclude-database]
 		 * : Do not export database (sql)
 		 *
-		 * [--exclude-tables]
+		 * [--exclude-tables[=<comma_separated_names>]]
 		 * : Do not export selected database tables (sql)
+		 *
+		 * [--include-tables[=<comma_separated_names>]]
+		 * : Include the selected non‑WP tables (sql)
 		 *
 		 * [--exclude-email-replace]
 		 * : Do not replace email domain (sql)

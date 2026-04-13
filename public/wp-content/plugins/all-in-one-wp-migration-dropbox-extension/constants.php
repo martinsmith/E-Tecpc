@@ -30,7 +30,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // ==================
 // = Plugin Version =
 // ==================
-define( 'AI1WMDE_VERSION', '3.71' );
+define( 'AI1WMDE_VERSION', '3.94' );
 
 // ===============
 // = Plugin Name =
@@ -72,30 +72,40 @@ define( 'AI1WMDE_TEMPLATES_PATH', AI1WMDE_LIB_PATH . DIRECTORY_SEPARATOR . 'view
 // ===============
 define( 'AI1WMDE_VENDOR_PATH', AI1WMDE_LIB_PATH . DIRECTORY_SEPARATOR . 'vendor' );
 
-// ===========================
-// = Purchase Activation URL =
-// ===========================
-define( 'AI1WMDE_PURCHASE_ACTIVATION_URL', 'https://servmask.com/purchase/activations' );
-
-// =======================
-// = Redirect Create URL =
-// =======================
+// ==================================
+// = Redirect Create App Folder URL =
+// ==================================
 define( 'AI1WMDE_REDIRECT_CREATE_URL', 'https://redirect.wp-migration.com/v1/dropbox/create' );
 
-// ======================
-// = ServMask Stats URL =
-// ======================
-define( 'AI1WMDE_STATS_URL', 'https://servmask.com/api/stats' );
+// ===================================
+// = Redirect Create Full Access URL =
+// ===================================
+define( 'AI1WMDE_REDIRECT_CREATE_FULL_URL', 'https://redirect.wp-migration.com/v1/dropbox-full/create' );
+
+// ========================
+// = Redirect Refresh URL =
+// ========================
+define( 'AI1WMDE_REDIRECT_REFRESH_URL', 'https://redirect.wp-migration.com/v1/dropbox/refresh' );
+
+// ====================================
+// = Redirect Refresh Full Access URL =
+// ====================================
+define( 'AI1WMDE_REDIRECT_REFRESH_FULL_URL', 'https://redirect.wp-migration.com/v1/dropbox-full/refresh' );
 
 // ===========================
 // = Default File Chunk Size =
 // ===========================
 define( 'AI1WMDE_DEFAULT_FILE_CHUNK_SIZE', 4 * 1024 * 1024 );
 
-// =================
-// = Max File Size =
-// =================
-define( 'AI1WMDE_MAX_FILE_SIZE', 0 );
+// ===============================
+// = Minimal Base Plugin Version =
+// ===============================
+define( 'AI1WMDE_MIN_AI1WM_VERSION', '7.103' );
+
+// ================================
+// = Add incremental to scheduler =
+// ================================
+define( 'AI1WMDE_PRO_INCREMENTAL', 1 );
 
 // ===============
 // = Purchase ID =

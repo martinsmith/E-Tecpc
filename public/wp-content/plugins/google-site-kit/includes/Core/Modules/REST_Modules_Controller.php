@@ -8,12 +8,15 @@
  * @link      https://sitekit.withgoogle.com
  */
 
+// phpcs:disable Generic.Metrics.CyclomaticComplexity.MaxExceeded
+
 namespace Google\Site_Kit\Core\Modules;
 
 use Google\Site_Kit\Core\Permissions\Permissions;
 use Google\Site_Kit\Core\REST_API\REST_Routes;
 use Google\Site_Kit\Core\REST_API\REST_Route;
 use Google\Site_Kit\Core\REST_API\Exception\Invalid_Datapoint_Exception;
+use Google\Site_Kit\Core\Storage\Setting_With_ViewOnly_Keys_Interface;
 use WP_REST_Server;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -58,7 +61,7 @@ class REST_Modules_Controller {
 	public function register() {
 		add_filter(
 			'googlesitekit_rest_routes',
-			function( $routes ) {
+			function ( $routes ) {
 				return array_merge( $routes, $this->get_rest_routes() );
 			}
 		);
@@ -184,19 +187,19 @@ class REST_Modules_Controller {
 	 * @return array List of REST_Route objects.
 	 */
 	private function get_rest_routes() {
-		$can_setup = function() {
+		$can_setup = function () {
 			return current_user_can( Permissions::SETUP );
 		};
 
-		$can_authenticate = function() {
+		$can_authenticate = function () {
 			return current_user_can( Permissions::AUTHENTICATE );
 		};
 
-		$can_list_data = function() {
+		$can_list_data = function () {
 			return current_user_can( Permissions::VIEW_SPLASH ) || current_user_can( Permissions::VIEW_DASHBOARD );
 		};
 
-		$can_view_insights = function() {
+		$can_view_insights = function () {
 			// This accounts for routes that need to be called before user has completed setup flow.
 			if ( current_user_can( Permissions::SETUP ) ) {
 				return true;
@@ -205,7 +208,7 @@ class REST_Modules_Controller {
 			return current_user_can( Permissions::VIEW_POSTS_INSIGHTS );
 		};
 
-		$can_manage_options = function() {
+		$can_manage_options = function () {
 			// This accounts for routes that need to be called before user has completed setup flow.
 			if ( current_user_can( Permissions::SETUP ) ) {
 				return true;
@@ -224,7 +227,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::READABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function () {
 							$modules = array_map(
 								array( $this, 'prepare_module_data_for_response' ),
 								$this->modules->get_available_modules()
@@ -243,7 +246,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::EDITABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$data = $request['data'];
 							$slug = isset( $data['slug'] ) ? $data['slug'] : '';
 
@@ -303,7 +306,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::READABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							try {
 								$module = $this->modules->get_module( $request['slug'] );
 							} catch ( Exception $e ) {
@@ -331,7 +334,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::EDITABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$data = $request['data'];
 							$slug = isset( $data['slug'] ) ? $data['slug'] : '';
 
@@ -341,8 +344,8 @@ class REST_Modules_Controller {
 								return new WP_Error( 'invalid_module_slug', __( 'Invalid module slug.', 'google-site-kit' ), array( 'status' => 404 ) );
 							}
 
-							if ( ! $this->modules->is_module_connected( $slug ) ) {
-								return new WP_Error( 'module_not_connected', __( 'Module is not connected.', 'google-site-kit' ), array( 'status' => 400 ) );
+							if ( ! $module->is_connected() ) {
+								return new WP_Error( 'module_not_connected', __( 'Module is not connected.', 'google-site-kit' ), array( 'status' => 500 ) );
 							}
 
 							if ( ! $module instanceof Module_With_Service_Entity ) {
@@ -354,7 +357,7 @@ class REST_Modules_Controller {
 									);
 								}
 
-								return new WP_Error( 'invalid_module', __( 'Module access cannot be checked.', 'google-site-kit' ), array( 'status' => 400 ) );
+								return new WP_Error( 'invalid_module', __( 'Module access cannot be checked.', 'google-site-kit' ), array( 'status' => 500 ) );
 							}
 
 							$access = $module->check_service_entity_access();
@@ -385,7 +388,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::READABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$slug = $request['slug'];
 							$modules = $this->modules->get_available_modules();
 							if ( ! isset( $modules[ $slug ] ) ) {
@@ -422,7 +425,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::READABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) use ( $can_manage_options ) {
 							$slug = $request['slug'];
 							try {
 								$module = $this->modules->get_module( $slug );
@@ -433,13 +436,29 @@ class REST_Modules_Controller {
 							if ( ! $module instanceof Module_With_Settings ) {
 								return new WP_Error( 'invalid_module_slug', __( 'Module does not support settings.', 'google-site-kit' ), array( 'status' => 400 ) );
 							}
-							return new WP_REST_Response( $module->get_settings()->get() );
+
+							$settings = $module->get_settings();
+
+							if ( $can_manage_options() ) {
+								return new WP_REST_Response( $settings->get() );
+							}
+
+							if ( $settings instanceof Setting_With_ViewOnly_Keys_Interface ) {
+								$view_only_settings = array_intersect_key(
+									$settings->get(),
+									array_flip( $settings->get_view_only_keys() )
+								);
+
+								return new WP_REST_Response( $view_only_settings );
+							}
+
+							return new WP_Error( 'no_view_only_settings' );
 						},
-						'permission_callback' => $can_manage_options,
+						'permission_callback' => $can_list_data,
 					),
 					array(
 						'methods'             => WP_REST_Server::EDITABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$slug = $request['slug'];
 							try {
 								$module = $this->modules->get_module( $slug );
@@ -463,7 +482,7 @@ class REST_Modules_Controller {
 							'data' => array(
 								'type'              => 'object',
 								'description'       => __( 'Settings to set.', 'google-site-kit' ),
-								'validate_callback' => function( $value ) {
+								'validate_callback' => function ( $value ) {
 									return is_array( $value );
 								},
 							),
@@ -485,7 +504,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::CREATABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$slug = $request['slug'];
 							try {
 								$module = $this->modules->get_module( $slug );
@@ -521,7 +540,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::READABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$slug = $request['slug'];
 							try {
 								$module = $this->modules->get_module( $slug );
@@ -543,7 +562,7 @@ class REST_Modules_Controller {
 					),
 					array(
 						'methods'             => WP_REST_Server::EDITABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$slug = $request['slug'];
 							try {
 								$module = $this->modules->get_module( $slug );
@@ -567,7 +586,7 @@ class REST_Modules_Controller {
 							'data' => array(
 								'type'              => 'object',
 								'description'       => __( 'Data to set.', 'google-site-kit' ),
-								'validate_callback' => function( $value ) {
+								'validate_callback' => function ( $value ) {
 									return is_array( $value );
 								},
 							),
@@ -594,7 +613,7 @@ class REST_Modules_Controller {
 				array(
 					array(
 						'methods'             => WP_REST_Server::EDITABLE,
-						'callback'            => function( WP_REST_Request $request ) {
+						'callback'            => function ( WP_REST_Request $request ) {
 							$data = $request['data'];
 							$slugs = isset( $data['slugs'] ) ? $data['slugs'] : array();
 
@@ -686,14 +705,17 @@ class REST_Modules_Controller {
 									continue;
 								}
 
-								// Update the module's ownerID to the ID of the user making the request.
-								$module_setting_updates = array(
-									'ownerID' => get_current_user_id(),
-								);
-								$recovered_module = $module->get_settings()->merge( $module_setting_updates );
+								if ( $module instanceof Module_With_Settings ) {
+									// Update the module's ownerID to the ID of the user making the request.
+									$module_setting_updates = array(
+										'ownerID' => get_current_user_id(),
+									);
 
-								if ( $recovered_module ) {
-									$response['success'][ $slug ] = true;
+									$recovered_module = $module->get_settings()->merge( $module_setting_updates );
+
+									if ( $recovered_module ) {
+										$response['success'][ $slug ] = true;
+									}
 								}
 							}
 
@@ -725,20 +747,21 @@ class REST_Modules_Controller {
 	 */
 	private function prepare_module_data_for_response( Module $module ) {
 		$module_data = array(
-			'slug'         => $module->slug,
-			'name'         => $module->name,
-			'description'  => $module->description,
-			'homepage'     => $module->homepage,
-			'internal'     => $module->internal,
-			'order'        => $module->order,
-			'forceActive'  => $module->force_active,
-			'shareable'    => $module->is_shareable(),
-			'recoverable'  => $module->is_recoverable(),
-			'active'       => $this->modules->is_module_active( $module->slug ),
-			'connected'    => $this->modules->is_module_connected( $module->slug ),
-			'dependencies' => $this->modules->get_module_dependencies( $module->slug ),
-			'dependants'   => $this->modules->get_module_dependants( $module->slug ),
-			'owner'        => null,
+			'slug'           => $module->slug,
+			'name'           => $module->name,
+			'description'    => $module->description,
+			'homepage'       => $module->homepage,
+			'internal'       => $module->internal,
+			'order'          => $module->order,
+			'forceActive'    => $module->force_active,
+			'recoverable'    => $module->is_recoverable(),
+			'shareable'      => $this->modules->is_module_shareable( $module->slug ),
+			'active'         => $this->modules->is_module_active( $module->slug ),
+			'connected'      => $this->modules->is_module_connected( $module->slug ),
+			'disconnectedAt' => $this->modules->get_module_disconnected_at( $module->slug ),
+			'dependencies'   => $this->modules->get_module_dependencies( $module->slug ),
+			'dependants'     => $this->modules->get_module_dependants( $module->slug ),
+			'owner'          => null,
 		);
 
 		if ( current_user_can( 'list_users' ) && $module instanceof Module_With_Owner ) {

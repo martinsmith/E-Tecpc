@@ -58,7 +58,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<ul class="ai1wmde-file-list">
 				<li v-for="item in items" v-on:click="browse(item)" class="ai1wmde-file-item">
 					<span class="ai1wmde-file-name">
-						<i v-bind:class="item | icon"></i>
+						<i v-bind:class="icon(item)"></i>
 						{{ item.name }}
 					</span>
 					<span class="ai1wmde-file-date">{{ item.date }}</span>

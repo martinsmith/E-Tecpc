@@ -46,6 +46,14 @@ if ( defined( 'WP_CLI' ) ) {
 				'class-ai1wmde-dropbox-wp-cli-command.php';
 }
 
+require_once AI1WMDE_VENDOR_PATH .
+			DIRECTORY_SEPARATOR .
+			'servmask' .
+			DIRECTORY_SEPARATOR .
+			'pro' .
+			DIRECTORY_SEPARATOR .
+			'ai1wmve.php';
+
 require_once AI1WMDE_CONTROLLER_PATH .
 			DIRECTORY_SEPARATOR .
 			'class-ai1wmde-main-controller.php';
@@ -61,10 +69,6 @@ require_once AI1WMDE_CONTROLLER_PATH .
 require_once AI1WMDE_CONTROLLER_PATH .
 			DIRECTORY_SEPARATOR .
 			'class-ai1wmde-settings-controller.php';
-
-require_once AI1WMDE_CONTROLLER_PATH .
-			DIRECTORY_SEPARATOR .
-			'class-ai1wmde-stats-controller.php';
 
 require_once AI1WMDE_EXPORT_PATH .
 			DIRECTORY_SEPARATOR .

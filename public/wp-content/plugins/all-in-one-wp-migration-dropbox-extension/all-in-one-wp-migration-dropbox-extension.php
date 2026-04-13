@@ -5,7 +5,7 @@
  * Description: Extension for All-in-One WP Migration that enables using Dropbox for imports and exports
  * Author: ServMask
  * Author URI: https://servmask.com/
- * Version: 3.71
+ * Version: 3.94
  * Text Domain: all-in-one-wp-migration-dropbox-extension
  * Domain Path: /languages
  * Network: True
@@ -66,4 +66,4 @@ require_once dirname( __FILE__ ) . DIRECTORY_SEPARATOR . 'loader.php';
 // ===========================================================================
 // = All app initialization is done in Ai1wmde_Main_Controller __constructor =
 // ===========================================================================
-$main_controller = new Ai1wmde_Main_Controller();
+$main_controller = new Ai1wmde_Main_Controller( 'AI1WMDE', 'dropbox' );

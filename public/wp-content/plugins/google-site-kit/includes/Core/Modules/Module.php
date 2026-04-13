@@ -26,11 +26,9 @@ use Google\Site_Kit\Core\Authentication\Clients\Google_Site_Kit_Client;
 use Google\Site_Kit\Core\REST_API\Exception\Invalid_Datapoint_Exception;
 use Google\Site_Kit\Core\REST_API\Data_Request;
 use Google\Site_Kit\Core\Storage\Transients;
-use Google\Site_Kit\Core\Util\URL;
 use Google\Site_Kit_Dependencies\Google\Service as Google_Service;
 use Google\Site_Kit_Dependencies\Google_Service_Exception;
 use Google\Site_Kit_Dependencies\Psr\Http\Message\RequestInterface;
-use Google\Site_Kit_Dependencies\TrueBV\Punycode;
 use WP_Error;
 
 /**
@@ -136,10 +134,10 @@ abstract class Module {
 	 */
 	public function __construct(
 		Context $context,
-		Options $options = null,
-		User_Options $user_options = null,
-		Authentication $authentication = null,
-		Assets $assets = null
+		?Options $options = null,
+		?User_Options $user_options = null,
+		?Authentication $authentication = null,
+		?Assets $assets = null
 	) {
 		$this->context        = $context;
 		$this->options        = $options ?: new Options( $this->context );
@@ -296,7 +294,13 @@ abstract class Module {
 			throw new Invalid_Datapoint_Exception();
 		}
 
-		return new Datapoint( $definitions[ $datapoint_id ] );
+		$datapoint = $definitions[ $datapoint_id ];
+
+		if ( $datapoint instanceof Datapoint ) {
+			return $datapoint;
+		}
+
+		return new Datapoint( $datapoint );
 	}
 
 	/**
@@ -305,11 +309,12 @@ abstract class Module {
 	 * @since 1.0.0
 	 *
 	 * @param Data_Request $data Data request object.
+	 *
 	 * // phpcs:ignore Squiz.Commenting.FunctionComment.InvalidNoReturn
 	 * @return RequestInterface|callable|WP_Error Request object or callable on success, or WP_Error on failure.
 	 * @throws Invalid_Datapoint_Exception Override in a sub-class.
 	 */
-	protected function create_data_request( Data_Request $data ) {
+	protected function create_data_request( Data_Request $data ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found,Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
 		throw new Invalid_Datapoint_Exception();
 	}
 
@@ -358,11 +363,13 @@ abstract class Module {
 				$restore_defers[] = $oauth_client->get_client()->withDefer( true );
 
 				$current_user = wp_get_current_user();
-				// Adds the current user to the active consumers list.
-				$oauth_client->add_active_consumer( $current_user );
 			}
 
-			$request = $this->create_data_request( $data );
+			if ( $datapoint instanceof Executable_Datapoint ) {
+				$request = $datapoint->create_request( $data );
+			} else {
+				$request = $this->create_data_request( $data );
+			}
 
 			if ( is_wp_error( $request ) ) {
 				return $request;
@@ -387,6 +394,10 @@ abstract class Module {
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
+		}
+
+		if ( $datapoint instanceof Executable_Datapoint ) {
+			return $datapoint->parse_response( $response, $data );
 		}
 
 		return $this->parse_data_response( $data, $response );
@@ -434,37 +445,6 @@ abstract class Module {
 	}
 
 	/**
-	 * Parses a date range string into a start date and an end date.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param string $range         Date range string. Either 'last-7-days', 'last-14-days', 'last-90-days', or
-	 *                              'last-28-days' (default).
-	 * @param string $multiplier    Optional. How many times the date range to get. This value can be specified if the
-	 *                              range should be request multiple times back. Default 1.
-	 * @param int    $offset        Days the range should be offset by. Default 1. Used by Search Console where
-	 *                              data is delayed by two days.
-	 * @param bool   $previous      Whether to select the previous period. Default false.
-	 *
-	 * @return array List with two elements, the first with the start date and the second with the end date, both as
-	 *               'Y-m-d'.
-	 */
-	protected function parse_date_range( $range, $multiplier = 1, $offset = 1, $previous = false ) {
-		preg_match( '*-(\d+)-*', $range, $matches );
-		$number_of_days = $multiplier * ( isset( $matches[1] ) ? $matches[1] : 28 );
-
-		// Calculate the end date. For previous period requests, offset period by the number of days in the request.
-		$end_date_offset = $previous ? $offset + $number_of_days : $offset;
-		$date_end        = gmdate( 'Y-m-d', strtotime( $end_date_offset . ' days ago' ) );
-
-		// Set the start date.
-		$start_date_offset = $end_date_offset + $number_of_days - 1;
-		$date_start        = gmdate( 'Y-m-d', strtotime( $start_date_offset . ' days ago' ) );
-
-		return array( $date_start, $date_end );
-	}
-
-	/**
 	 * Gets the output for a specific frontend hook.
 	 *
 	 * @since 1.0.0
@@ -486,71 +466,6 @@ abstract class Module {
 		wp_set_current_user( $current_user_id );
 
 		return $output;
-	}
-
-	/**
-	 * Permutes site URL to cover all different variants of it (not considering the path).
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param string $site_url Site URL to get permutations for.
-	 * @return array List of permutations.
-	 */
-	final protected function permute_site_url( $site_url ) {
-		$hostname = URL::parse( $site_url, PHP_URL_HOST );
-		$path     = URL::parse( $site_url, PHP_URL_PATH );
-
-		return array_reduce(
-			$this->permute_site_hosts( $hostname ),
-			function ( $urls, $host ) use ( $path ) {
-				$host_with_path = $host . $path;
-				array_push( $urls, "https://$host_with_path", "http://$host_with_path" );
-				return $urls;
-			},
-			array()
-		);
-	}
-
-	/**
-	 * Generates common variations of the given hostname.
-	 *
-	 * Returns a list of hostnames that includes:
-	 * - (if IDN) in Punycode encoding
-	 * - (if IDN) in Unicode encoding
-	 * - with and without www. subdomain (including IDNs)
-	 *
-	 * @since 1.38.0
-	 *
-	 * @param string $hostname Hostname to generate variations of.
-	 * @return string[] Hostname variations.
-	 */
-	protected function permute_site_hosts( $hostname ) {
-		$punycode = new Punycode();
-		// See \Requests_IDNAEncoder::is_ascii.
-		$is_ascii = preg_match( '/(?:[^\x00-\x7F])/', $hostname ) !== 1;
-		$is_www   = 0 === strpos( $hostname, 'www.' );
-		// Normalize hostname without www.
-		$hostname = $is_www ? substr( $hostname, strlen( 'www.' ) ) : $hostname;
-		$hosts    = array( $hostname, "www.$hostname" );
-
-		try {
-			// An ASCII hostname can only be non-IDN or punycode-encoded.
-			if ( $is_ascii ) {
-				// If the hostname is in punycode encoding, add the decoded version to the list of hosts.
-				if ( 0 === strpos( $hostname, Punycode::PREFIX ) || false !== strpos( $hostname, '.' . Punycode::PREFIX ) ) {
-					$host_decoded = $punycode->decode( $hostname );
-					array_push( $hosts, $host_decoded, "www.$host_decoded" );
-				}
-			} else {
-				// If it's not ASCII, then add the punycode encoded version.
-				$host_encoded = $punycode->encode( $hostname );
-				array_push( $hosts, $host_encoded, "www.$host_encoded" );
-			}
-		} catch ( Exception $exception ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-			// Do nothing.
-		}
-
-		return $hosts;
 	}
 
 	/**
@@ -679,7 +594,7 @@ abstract class Module {
 	 * @return array Google services as $identifier => $service_instance pairs. Every $service_instance must be an
 	 *               instance of Google_Service.
 	 */
-	protected function setup_services( Google_Site_Kit_Client $client ) {
+	protected function setup_services( Google_Site_Kit_Client $client ) {// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found
 		return array();
 	}
 
@@ -739,7 +654,7 @@ abstract class Module {
 	 * @param string    $datapoint Optional. Datapoint originally requested. Default is an empty string.
 	 * @return WP_Error WordPress error object.
 	 */
-	protected function exception_to_error( Exception $e, $datapoint = '' ) {
+	protected function exception_to_error( Exception $e, $datapoint = '' ) { // phpcs:ignore phpcs:enable Generic.CodeAnalysis.UnusedFunctionParameter.Found,Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
 		if ( $e instanceof WP_Errorable ) {
 			return $e->to_wp_error();
 		}
@@ -808,7 +723,7 @@ abstract class Module {
 		}
 
 		$items = array_map(
-			function( $item ) {
+			function ( $item ) {
 				if ( ! is_string( $item ) ) {
 					return false;
 				}
@@ -869,8 +784,12 @@ abstract class Module {
 	public function is_shareable() {
 		if ( $this instanceof Module_With_Owner && $this->is_connected() ) {
 			$datapoints = $this->get_datapoint_definitions();
-			foreach ( $datapoints as $details ) {
-				if ( ! empty( $details['shareable'] ) ) {
+			foreach ( $datapoints as $datapoint ) {
+				if ( $datapoint instanceof Shareable_Datapoint ) {
+					return $datapoint->is_shareable();
+				}
+
+				if ( ! empty( $datapoint['shareable'] ) ) {
 					return true;
 				}
 			}

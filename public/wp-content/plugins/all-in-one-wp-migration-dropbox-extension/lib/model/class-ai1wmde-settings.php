@@ -39,8 +39,12 @@ class Ai1wmde_Settings {
 		// Revoke token
 		$dropbox->revoke();
 
-		// Remove token option
+		// Remove token options
+		delete_option( 'ai1wmde_offline' );
 		delete_option( 'ai1wmde_dropbox_token' );
+		delete_option( 'ai1wmde_dropbox_full_access' );
+		delete_option( 'ai1wmde_dropbox_access_token' );
+		delete_option( 'ai1wmde_dropbox_access_token_expires_in' );
 
 		// Remove cron option
 		delete_option( 'ai1wmde_dropbox_cron' );
@@ -139,11 +143,12 @@ class Ai1wmde_Settings {
 		}
 
 		return array(
-			'name'     => $name,
-			'email'    => $email,
-			'used'     => ai1wm_size_format( $used ),
-			'total'    => ai1wm_size_format( $total ),
-			'progress' => ceil( ( $used / $total ) * 100 ),
+			'name'       => $name,
+			'email'      => $email,
+			'used'       => ai1wm_size_format( $used ),
+			'total'      => ai1wm_size_format( $total ),
+			'progress'   => ceil( ( $used / $total ) * 100 ),
+			'fullAccess' => $this->get_full_folder_access(),
 		);
 	}
 
@@ -201,6 +206,38 @@ class Ai1wmde_Settings {
 
 	public function set_token( $token ) {
 		return update_option( 'ai1wmde_dropbox_token', $token );
+	}
+
+	public function set_access_token( $token ) {
+		return update_option( 'ai1wmde_dropbox_access_token', $token );
+	}
+
+	public function get_access_token() {
+		return get_option( 'ai1wmde_dropbox_access_token', false );
+	}
+
+	public function set_access_token_expires_in( $expires_in ) {
+		return update_option( 'ai1wmde_dropbox_access_token_expires_in', $expires_in );
+	}
+
+	public function get_access_token_expires_in() {
+		return get_option( 'ai1wmde_dropbox_access_token_expires_in', false );
+	}
+
+	public function set_offline( $value ) {
+		return update_option( 'ai1wmde_offline', $value );
+	}
+
+	public function get_offline() {
+		return get_option( 'ai1wmde_offline', false );
+	}
+
+	public function set_full_access( $value ) {
+		return update_option( 'ai1wmde_dropbox_full_access', $value );
+	}
+
+	public function get_full_access() {
+		return get_option( 'ai1wmde_dropbox_full_access', false );
 	}
 
 	public function get_token() {
@@ -284,7 +321,7 @@ class Ai1wmde_Settings {
 	}
 
 	public function get_notify_error_subject() {
-		return get_option( 'ai1wmde_dropbox_notify_error_subject', sprintf( __( '❌ Backup to Dropbox has failed (%s)', AI1WMDE_PLUGIN_NAME ), parse_url( site_url(), PHP_URL_HOST ) . parse_url( site_url(), PHP_URL_PATH ) ) );
+		return get_option( 'ai1wmde_dropbox_notify_error_subject', sprintf( __( 'Backup to Dropbox has failed (%s)', AI1WMDE_PLUGIN_NAME ), parse_url( site_url(), PHP_URL_HOST ) . parse_url( site_url(), PHP_URL_PATH ) ) );
 	}
 
 	public function set_notify_email( $email ) {
@@ -301,5 +338,9 @@ class Ai1wmde_Settings {
 
 	public function get_incremental() {
 		return get_option( 'ai1wmde_dropbox_incremental', false );
+	}
+
+	public function get_full_folder_access() {
+		return get_option( 'ai1wmde_dropbox_full_access', null );
 	}
 }

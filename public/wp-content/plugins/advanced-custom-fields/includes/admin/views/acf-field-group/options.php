@@ -1,4 +1,13 @@
 <?php
+/**
+ * @package ACF
+ * @author  WP Engine
+ *
+ * © 2026 Advanced Custom Fields (ACF®). All rights reserved.
+ * "ACF" is a trademark of WP Engine.
+ * Licensed under the GNU General Public License v2 or later.
+ * https://www.gnu.org/licenses/gpl-2.0.html
+ */
 
 // global
 global $field_group;
@@ -17,38 +26,44 @@ if ( empty( $field_group['location'] ) ) {
 		),
 	);
 
-	$acf_use_post_type = acf_request_arg( 'use_post_type', false );
-	if ( $acf_use_post_type && wp_verify_nonce( acf_request_arg( '_wpnonce' ), 'add-fields-' . $acf_use_post_type ) ) {
-		$acf_post_type = acf_get_internal_post_type( (int) $acf_use_post_type, 'acf-post-type' );
+	$acf_use_post_type    = acf_get_post_type_from_request_args( 'add-fields' );
+	$acf_use_taxonomy     = acf_get_taxonomy_from_request_args( 'add-fields' );
+	$acf_use_options_page = acf_get_ui_options_page_from_request_args( 'add-fields' );
 
-		if ( $acf_post_type && isset( $acf_post_type['post_type'] ) ) {
-			$field_group['location'] = array(
+	if ( $acf_use_post_type && ! empty( $acf_use_post_type['post_type'] ) ) {
+		$field_group['location'] = array(
+			array(
 				array(
-					array(
-						'param'    => 'post_type',
-						'operator' => '==',
-						'value'    => $acf_post_type['post_type'],
-					),
+					'param'    => 'post_type',
+					'operator' => '==',
+					'value'    => $acf_use_post_type['post_type'],
 				),
-			);
-		}
+			),
+		);
 	}
 
-	$acf_use_taxonomy = acf_request_arg( 'use_taxonomy', false );
-	if ( $acf_use_taxonomy && wp_verify_nonce( acf_request_arg( '_wpnonce' ), 'add-fields-' . $acf_use_taxonomy ) ) {
-		$acf_taxonomy = acf_get_internal_post_type( (int) $acf_use_taxonomy, 'acf-taxonomy' );
-
-		if ( $acf_taxonomy && isset( $acf_taxonomy['taxonomy'] ) ) {
-			$field_group['location'] = array(
+	if ( $acf_use_taxonomy && ! empty( $acf_use_taxonomy['taxonomy'] ) ) {
+		$field_group['location'] = array(
+			array(
 				array(
-					array(
-						'param'    => 'taxonomy',
-						'operator' => '==',
-						'value'    => $acf_taxonomy['taxonomy'],
-					),
+					'param'    => 'taxonomy',
+					'operator' => '==',
+					'value'    => $acf_use_taxonomy['taxonomy'],
 				),
-			);
-		}
+			),
+		);
+	}
+
+	if ( $acf_use_options_page && ! empty( $acf_use_options_page['menu_slug'] ) ) {
+		$field_group['location'] = array(
+			array(
+				array(
+					'param'    => 'options_page',
+					'operator' => '==',
+					'value'    => $acf_use_options_page['menu_slug'],
+				),
+			),
+		);
 	}
 }
 
@@ -66,6 +81,8 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 		case 'location_rules':
 			echo '<div class="field-group-locations field-group-settings-tab">';
 				acf_get_view( 'acf-field-group/locations' );
+
+				do_action( 'acf/field_group/render_additional_location_settings', $field_group );
 			echo '</div>';
 			break;
 		case 'presentation':
@@ -93,7 +110,7 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 			acf_render_field_wrap(
 				array(
 					'label'         => __( 'Position', 'acf' ),
-					'instructions'  => '',
+					'instructions'  => __( "'High' position not supported in the Block Editor", 'acf' ),
 					'type'          => 'button_group',
 					'name'          => 'position',
 					'prefix'        => 'acf_field_group',
@@ -104,14 +121,16 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 						'side'            => __( 'Side', 'acf' ),
 					),
 					'default_value' => 'normal',
-				)
+				),
+				'div',
+				'field'
 			);
 
 
 			// label_placement
 			acf_render_field_wrap(
 				array(
-					'label'        => __( 'Label placement', 'acf' ),
+					'label'        => __( 'Label Placement', 'acf' ),
 					'instructions' => '',
 					'type'         => 'button_group',
 					'name'         => 'label_placement',
@@ -128,7 +147,7 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 			// instruction_placement
 			acf_render_field_wrap(
 				array(
-					'label'        => __( 'Instruction placement', 'acf' ),
+					'label'        => __( 'Instruction Placement', 'acf' ),
 					'instructions' => '',
 					'type'         => 'button_group',
 					'name'         => 'instruction_placement',
@@ -155,6 +174,8 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 				'div',
 				'field'
 			);
+
+			do_action( 'acf/field_group/render_additional_presentation_settings', $field_group );
 
 			echo '</div>';
 			echo '<div class="field-group-setting-split">';
@@ -213,8 +234,6 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 					'prefix'       => 'acf_field_group',
 					'value'        => $field_group['active'],
 					'ui'           => 1,
-				// 'ui_on_text'  => __('Active', 'acf'),
-				// 'ui_off_text' => __('Inactive', 'acf'),
 				)
 			);
 
@@ -229,8 +248,6 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 						'prefix'       => 'acf_field_group',
 						'value'        => $field_group['show_in_rest'],
 						'ui'           => 1,
-					// 'ui_on_text'  => __('Active', 'acf'),
-					// 'ui_off_text' => __('Inactive', 'acf'),
 					)
 				);
 			}
@@ -248,6 +265,33 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 				'div',
 				'field'
 			);
+
+			acf_render_field_wrap(
+				array(
+					'label'        => __( 'Display Title', 'acf' ),
+					'instructions' => __( 'Title shown on the edit screen for the field group meta box to use instead of the field group title', 'acf' ),
+					'type'         => 'text',
+					'name'         => 'display_title',
+					'prefix'       => 'acf_field_group',
+					'value'        => $field_group['display_title'],
+				),
+				'div',
+				'field'
+			);
+
+			do_action( 'acf/field_group/render_additional_group_settings', $field_group );
+
+			/* translators: 1: Post creation date 2: Post creation time */
+			$acf_created_on = sprintf( __( 'Created on %1$s at %2$s', 'acf' ), get_the_date(), get_the_time() );
+			?>
+			<div class="acf-field-group-settings-footer">
+				<span class="acf-created-on"><?php echo esc_html( $acf_created_on ); ?></span>
+				<a href="<?php echo get_delete_post_link(); ?>" class="acf-btn acf-btn-tertiary  acf-delete-field-group">
+					<i class="acf-icon acf-icon-trash"></i>
+					<?php esc_html_e( 'Delete Field Group', 'acf' ); ?>
+				</a>
+			</div>
+			<?php
 			echo '</div>';
 			break;
 		default:
@@ -260,20 +304,10 @@ foreach ( acf_get_combined_field_group_settings_tabs() as $tab_key => $tab_label
 
 // 3rd party settings
 do_action( 'acf/render_field_group_settings', $field_group );
-
-/* translators: 1: Post creation date 2: Post creation time */
-$acf_created_on = sprintf( __( 'Created on %1$s at %2$s', 'acf' ), get_the_date(), get_the_time() );
 ?>
-<div class="acf-field-group-settings-footer">
-	<span class="acf-created-on"><?php echo esc_html( $acf_created_on ); ?></span>
-	<a href="<?php echo get_delete_post_link(); ?>" class="acf-btn acf-btn-tertiary  acf-delete-field-group">
-		<i class="acf-icon acf-icon-trash"></i>
-		<?php esc_html_e( 'Delete Field Group', 'acf' ); ?>
-	</a>
-</div>
 
 <div class="acf-hidden">
-	<input type="hidden" name="acf_field_group[key]" value="<?php echo $field_group['key']; ?>" />
+	<input type="hidden" name="acf_field_group[key]" value="<?php echo esc_attr( $field_group['key'] ); ?>" />
 </div>
 <script type="text/javascript">
 if( typeof acf !== 'undefined' ) {

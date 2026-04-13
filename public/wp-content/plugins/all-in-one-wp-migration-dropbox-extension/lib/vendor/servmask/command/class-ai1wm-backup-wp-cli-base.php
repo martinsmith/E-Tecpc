@@ -142,61 +142,123 @@ if ( defined( 'WP_CLI' ) && ! class_exists( 'Ai1wm_Backup_WP_CLI_Base' ) ) {
 
 			if ( isset( $assoc_args['exclude-database'] ) ) {
 				$params['options']['no_database'] = true;
-			} elseif ( isset( $assoc_args['exclude-tables'] ) ) {
-				global $wpdb;
+			} else {
+				// Exclude some of the tables
+				if ( isset( $assoc_args['exclude-tables'] ) ) {
+					$mysql = Ai1wm_Database_Utility::get_client();
 
-				if ( empty( $wpdb->use_mysqli ) ) {
-					$mysql = new Ai1wm_Database_Mysql( $wpdb );
-				} else {
-					$mysql = new Ai1wm_Database_Mysqli( $wpdb );
-				}
+					// Include table prefixes
+					if ( ai1wm_table_prefix() ) {
+						$mysql->add_table_prefix_filter( ai1wm_table_prefix() );
 
-				// Include table prefixes
-				if ( ai1wm_table_prefix() ) {
-					$mysql->add_table_prefix_filter( ai1wm_table_prefix() );
-
-					// Include table prefixes (Webba Booking)
-					foreach ( array( 'wbk_services', 'wbk_days_on_off', 'wbk_locked_time_slots', 'wbk_appointments', 'wbk_cancelled_appointments', 'wbk_email_templates', 'wbk_service_categories', 'wbk_gg_calendars', 'wbk_coupons' ) as $table_name ) {
-						$mysql->add_table_prefix_filter( $table_name );
+						// Include table prefixes (Webba Booking and CiviCRM)
+						foreach ( array( 'wbk_', 'civicrm_' ) as $table_name ) {
+							$mysql->add_table_prefix_filter( $table_name );
+						}
 					}
-				}
+					$all_tables = $mysql->get_tables();
 
-				$tables = new cli\Table;
+					if ( $assoc_args['exclude-tables'] === true || empty( $assoc_args['exclude-tables'] ) ) {
+						$tables = new cli\Table;
 
-				$tables->setHeaders(
-					array(
-						'name' => sprintf( 'Tables (%s)', DB_NAME ),
-					)
-				);
+						$tables->setHeaders(
+							array(
+								'name' => sprintf( 'Tables to exclude (%s)', DB_NAME ),
+							)
+						);
 
-				foreach ( $all_tables = $mysql->get_tables() as $table_name ) {
-					$tables->addRow(
-						array(
-							'name' => $table_name,
-						)
-					);
-				}
+						foreach ( $all_tables as $table_name ) {
+							$tables->addRow(
+								array(
+									'name' => $table_name,
+								)
+							);
+						}
 
-				$tables->display();
-				$excluded_tables = array();
+						$tables->display();
+						$excluded_tables = array();
 
-				while ( $table = trim( readline( 'Enter table name to exclude from backup (q=quit, empty=continue): ' ) ) ) {
-					switch ( $table ) {
-						case 'q':
-							exit;
+						while ( $table = trim( readline( 'Enter table name to exclude from backup (q=quit, empty=continue): ' ) ) ) {
+							switch ( $table ) {
+								case 'q':
+									exit;
 
-						default:
-							if ( ! in_array( $table, $all_tables ) ) {
-								WP_CLI::warning( __( 'Unknown table: ', AI1WM_PLUGIN_NAME ) . $table );
-								break;
+								default:
+									if ( ! in_array( $table, $all_tables ) ) {
+										WP_CLI::warning( __( 'Unknown table: ', AI1WM_PLUGIN_NAME ) . $table );
+										break;
+									}
+									$excluded_tables[] = $table;
 							}
-							$excluded_tables[] = $table;
+						}
+					} else {
+						$excluded_tables = array_intersect(
+							$all_tables,
+							array_filter( explode( ',', $assoc_args['exclude-tables'] ), 'trim' )
+						);
+					}
+
+					if ( ! empty( $excluded_tables ) ) {
+						$params['options']['exclude_db_tables'] = true;
+						$params['excluded_db_tables']           = implode( ',', $excluded_tables );
 					}
 				}
 
-				if ( ! empty( $excluded_tables ) ) {
-					$params['options']['exclude_db_tables'] = true;
-					$params['excluded_db_tables']           = implode( ',', $excluded_tables );
+				// Include additional tables
+				if ( isset( $assoc_args['include-tables'] ) ) {
+					$mysql = Ai1wm_Database_Utility::get_client();
+
+					// Include table prefixes
+					if ( ai1wm_table_prefix() ) {
+						$mysql->add_table_prefix_filter( '', sprintf( '(%s|%s|%s)', ai1wm_table_prefix(), 'wbk_', 'civicrm_' ) );
+					} else {
+						$mysql->add_table_prefix_filter( '', sprintf( '(%s|%s)', 'wbk_', 'civicrm_' ) );
+					}
+
+					if ( $assoc_args['include-tables'] === true || empty( $assoc_args['include-tables'] ) ) {
+						$tables = new cli\Table;
+
+						$tables->setHeaders(
+							array(
+								'name' => sprintf( 'Tables to include (%s)', DB_NAME ),
+							)
+						);
+
+						foreach ( $mysql->get_tables() as $table_name ) {
+							$tables->addRow(
+								array(
+									'name' => $table_name,
+								)
+							);
+						}
+
+						$tables->display();
+						$included_tables = array();
+
+						while ( $table = trim( readline( 'Enter table name to include in backup (q=quit, empty=continue): ' ) ) ) {
+							switch ( $table ) {
+								case 'q':
+									exit;
+
+								default:
+									if ( ! in_array( $table, $all_tables ) ) {
+										WP_CLI::warning( __( 'Unknown table: ', AI1WM_PLUGIN_NAME ) . $table );
+										break;
+									}
+									$included_tables[] = $table;
+							}
+						}
+					} else {
+						$included_tables = array_intersect(
+							$all_tables,
+							array_filter( explode( ',', $assoc_args['include-tables'] ), 'trim' )
+						);
+					}
+
+					if ( ! empty( $included_tables ) ) {
+						$params['options']['include_db_tables'] = true;
+						$params['included_db_tables']           = implode( ',', $included_tables );
+					}
 				}
 			}
 
@@ -214,27 +276,36 @@ if ( defined( 'WP_CLI' ) && ! class_exists( 'Ai1wm_Backup_WP_CLI_Base' ) ) {
 			}
 
 			if ( is_multisite() && isset( $assoc_args['sites'] ) ) {
-				while ( ( $site_id = readline( 'Enter site ID (q=quit, l=list sites): ' ) ) ) {
-					switch ( $site_id ) {
-						case 'q':
-							exit;
+				$sites = array();
+				if ( ! is_bool( $assoc_args['sites'] ) ) {
+					$sites = array_filter( explode( ',', $assoc_args['sites'] ), 'trim' );
+				}
 
-						case 'l':
-							WP_CLI::runcommand( 'site list --fields=blog_id,url' );
-							break;
+				if ( ! empty( $sites ) ) {
+					$params['options']['sites'] = $sites;
+				} else {
+					while ( ( $site_id = readline( 'Enter site ID (q=quit, l=list sites): ' ) ) ) {
+						switch ( $site_id ) {
+							case 'q':
+								exit;
 
-						default:
-							if ( ! get_blog_details( $site_id ) ) {
-								WP_CLI::error_multi_line(
-									array(
-										__( 'A site with this ID does not exist.', AI1WM_PLUGIN_NAME ),
-										__( 'To list the sites type `l`.', AI1WM_PLUGIN_NAME ),
-									)
-								);
+							case 'l':
+								WP_CLI::runcommand( 'site list --fields=blog_id,url' );
 								break;
-							}
 
-							$params['options']['sites'][] = $site_id;
+							default:
+								if ( ! get_blog_details( $site_id ) ) {
+									WP_CLI::error_multi_line(
+										array(
+											__( 'A site with this ID does not exist.', AI1WM_PLUGIN_NAME ),
+											__( 'To list the sites type `l`.', AI1WM_PLUGIN_NAME ),
+										)
+									);
+									break;
+								}
+
+								$params['options']['sites'][] = $site_id;
+						}
 					}
 				}
 			}

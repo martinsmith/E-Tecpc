@@ -60,7 +60,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 					v-bind:class="{'ai1wmde-dir-selected': item === selectedItem || item.path === preselectedItemID}"
 					class="ai1wmde-file-item">
 					<span style="width: 75%;" class="ai1wmde-file-name">
-						<i v-bind:class="item.type | icon"></i>
+						<i v-bind:class="icon(item.type)"></i>
 						{{ item.name }}
 					</span>
 					<span class="ai1wmde-file-date">{{ item.date }}</span>

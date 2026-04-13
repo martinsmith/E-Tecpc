@@ -1,11 +1,13 @@
 <?php
+/** Enable W3 Total Cache */
+define('WP_CACHE', true); // Added by W3 Total Cache
+
 define('WP_AUTO_UPDATE_CORE', 'minor');// This setting is required to make sure that WordPress updates can be properly managed in WordPress Toolkit. Remove this line if this WordPress website is not managed by WordPress Toolkit anymore.
 
 /** Enable W3 Total Cache - disabled locally so DDEV doesn't serve stale live-site cache */
 if ( getenv( 'IS_DDEV_PROJECT' ) == 'true' ) {
-    define( 'WP_CACHE', false );
-} else {
-    define( 'WP_CACHE', true ); // Added by W3 Total Cache
+    } else {
+     // Added by W3 Total Cache
 }
 
 /* LIVE */

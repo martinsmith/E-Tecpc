@@ -12,6 +12,17 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
 
     public $ver = Ninja_Forms::VERSION;
 
+    //Data needed into nfDasboard wp_localize_script
+    private $preloadedFormData;
+    private $fieldTypeData;
+    private $fieldSettings;
+    private $fieldTypeSections;
+    private $actionTypeData;
+    private $actionSettings;
+    private $formSettingTypeData;
+    private $formSettings;
+    private $mergeTags;
+
     // Stores whether or not this form has a password field.
     private $legacy_password = false;
 
@@ -141,10 +152,6 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
             Ninja_Forms::template( 'fields-product.html' );
             Ninja_Forms::template( 'fields-shipping.html' );
 
-            
-
-            $this->_enqueue_the_things( $form_id );
-
             delete_user_option( get_current_user_id(), 'nf_form_preview_' . $form_id );
 
             if( ! isset( $_GET[ 'ajax' ] ) ) {
@@ -158,6 +165,9 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
 
                 $this->_localize_merge_tags();
             }
+            //moved after _localize functions trigger to get inline variables
+            $this->_enqueue_the_things( $form_id );
+
         } else {
 
             /*
@@ -180,16 +190,22 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
 
 
             /*
+             * ONBOARDING
+             */
+
+            $onboarding_step = apply_filters( 'nf_onboarding_step_now', 0 );
+            if(1 === $onboarding_step || 2 === $onboarding_step) {
+                wp_enqueue_style( 'nf-onboarding', Ninja_Forms::$url . 'assets/css/nfOnboarding.css' );
+                wp_register_script( 'nf-onboarding', Ninja_Forms::$url . 'assets/js/lib/nfOnboarding.js', array('jquery', 'nf-jBox'), FALSE, TRUE);
+                wp_localize_script( 'nf-onboarding', 'nfOBi18n', Ninja_Forms::config('i18nOnboarding'));
+                wp_enqueue_script( 'nf-onboarding');
+                Ninja_Forms::template( 'admin-onboarding.html.php');
+            }
+            
+            /*
              * DASHBOARD
              */
             $dash_items = Ninja_Forms()->config('DashboardMenuItems');
-            ?>
-            <script>
-                var nfDashItems = <?php echo( json_encode( array_values( $dash_items ) ) ); ?>;
-                var useServices = <?php echo ( $use_services ) ? 'true' : 'false'; ?>;
-                var serviceSuccess = '<?php echo ( isset( $_GET[ 'success' ] ) ) ? htmlspecialchars( $_GET[ 'success' ] ) : ''; ?>';
-            </script>
-            <?php
 
             $required_updates = get_option( 'ninja_forms_needs_updates', 0 );
 
@@ -208,15 +224,19 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
 
             $promotions = get_option( 'nf_active_promotions' );
             $promotions = json_decode( $promotions, true );
+            $surveyPromo = new NF_Admin_SurveyPromo();
+            if($surveyPromo->shouldShow() && $surveyPromo->isDashboard()) $promotions = array();
 
             if( ! empty( $promotions ) ) {
                 wp_localize_script( 'nf-dashboard', 'nfPromotions', array_values( $promotions[ 'dashboard' ] ) );
             }
 
             wp_localize_script( 'nf-dashboard', 'nfAdmin', array(
+                'ajax_url'          => admin_url( 'admin-ajax.php' ),
                 'ajaxNonce'         => wp_create_nonce( 'ninja_forms_dashboard_nonce' ),
                 'batchNonce'        => wp_create_nonce( 'ninja_forms_batch_nonce' ),
                 'updateNonce'       => wp_create_nonce( 'ninja_forms_required_update_nonce' ),
+                'nf_optin_nonce'    => wp_create_nonce( 'nf_optin_nonce' ),
                 'formTelemetry'     => ( get_option( 'nf_form_tel_sent' ) ) ? 0 : 1,
                 'showOptin'         => ( get_option( 'ninja_forms_do_not_allow_tracking' ) ||
                                          get_option( 'ninja_forms_allow_tracking' ) ) ? 0 : 1,
@@ -225,7 +245,24 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
                 'builderURL'        => admin_url( 'admin.php?page=ninja-forms&form_id=' ),
                 'sendwpInstallNonce'       => wp_create_nonce( 'ninja_forms_sendwp_remote_install' ),
                 'disconnectNonce'         => wp_create_nonce( 'nf-oauth-disconnect' ),
+                'onboardingStep' => $onboarding_step,
             ) );
+
+            $nfDashInlineVars = [
+                "nfDashItems"           =>  array_values( $dash_items ),
+                "useServices"           =>  $use_services ? 'true' : 'false',
+                "serviceSuccess"        =>  isset( $_GET[ 'success' ] ) ? htmlspecialchars( $_GET[ 'success' ] ) : '',
+                "preloadedFormData"     =>  $this->preloadedFormData,
+                "fieldTypeData"         =>  $this->fieldTypeData,
+                "fieldSettings"         =>  $this->fieldSettings,
+                "fieldTypeSections"     =>  $this->fieldTypeSections,
+                "actionTypeData"        =>  $this->actionTypeData,
+                "actionSettings"        =>  $this->actionSettings,
+                "formSettingTypeData"   =>  $this->formSettingTypeData,
+                "formSettings"          =>  $this->formSettings,
+                "mergeTags"             =>  $this->mergeTags
+            ];
+            wp_localize_script( 'nf-dashboard', 'nfDashInlineVars', $nfDashInlineVars );
 
             wp_enqueue_style( 'nf-builder', Ninja_Forms::$url . 'assets/css/builder.css', array(), $this->ver );
             wp_enqueue_style( 'nf-dashboard', Ninja_Forms::$url . 'assets/css/dashboard.min.css', array(), $this->ver );
@@ -290,9 +327,11 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
          */
         wp_enqueue_style( 'wp-color-picker' );
         wp_enqueue_style( 'jBox', Ninja_Forms::$url . 'assets/css/jBox.css' );
-        wp_enqueue_style( 'summernote', Ninja_Forms::$url . 'assets/css/summernote.css' );
         wp_enqueue_style( 'codemirror', Ninja_Forms::$url . 'assets/css/codemirror.css' );
         wp_enqueue_style( 'codemirror-monokai', Ninja_Forms::$url . 'assets/css/monokai-theme.css' );
+        wp_enqueue_style( 'quill-core', Ninja_Forms::$url . 'assets/css/quill.core.css' );
+        wp_enqueue_style( 'quill-snow', Ninja_Forms::$url . 'assets/css/quill.snow.css' );
+        wp_enqueue_style( 'quill-custom', Ninja_Forms::$url . 'assets/css/quill-custom.css' );
 
         /**
          * JS Libraries
@@ -315,7 +354,7 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
         wp_enqueue_script( 'codemirror', Ninja_Forms::$url . 'assets/js/lib/codemirror.min.js', array( 'jquery', 'nf-builder-deps' ) );
         wp_enqueue_script( 'codemirror-xml', Ninja_Forms::$url . 'assets/js/lib/codemirror-xml.min.js', array( 'jquery', 'codemirror' ) );
         wp_enqueue_script( 'codemirror-formatting', Ninja_Forms::$url . 'assets/js/lib/codemirror-formatting.min.js', array( 'jquery', 'codemirror' ) );
-        wp_enqueue_script( 'summernote', Ninja_Forms::$url . 'assets/js/lib/summernote.min.js', array( 'jquery', 'nf-builder-deps' ) );
+        wp_enqueue_script( 'quill', Ninja_Forms::$url . 'assets/js/lib/quill.min.js', array( 'jquery', 'nf-builder-deps' ) );
 
 
         wp_enqueue_script( 'nf-builder', Ninja_Forms::$url . 'assets/js/min/builder.js', array( 'jquery', 'jquery-ui-core', 'jquery-ui-draggable', 'jquery-ui-droppable', 'jquery-ui-sortable', 'jquery-effects-bounce', 'wp-color-picker' ), $this->ver );
@@ -351,13 +390,39 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
             'editFormText'      => esc_html__( 'Edit Form', 'ninja-forms' ),
             'mobile'            => ( wp_is_mobile() ) ? 1: 0,
             'currencySymbols'   => array_merge( array( '' => Ninja_Forms()->get_setting( 'currency_symbol' ) ), Ninja_Forms::config( 'CurrencySymbol' ) ),
-            'dateFormat'        => Ninja_Forms()->get_setting( 'date_format' ),
+            'dateFormat'        => !empty( Ninja_Forms()->get_setting('date_format') ) ? Ninja_Forms()->get_setting('date_format') : get_option('date_format'),
             'formID'            => isset( $_GET[ 'form_id' ] ) ? absint( $_GET[ 'form_id' ] ) : 0,
             'home_url_host'     => $home_url[ 'host' ],
             'publicLinkStructure' => $public_link_structure,
             'devMode'           => (bool) $dev_mode,
+            'onboardingStep' => apply_filters( 'nf_onboarding_step_now', 0 ),
             'filter_esc_status'  =>    json_encode( WPN_Helper::maybe_disallow_unfiltered_html_for_escaping() ),
         ));
+
+        $nfDashInlineVars = [
+            "preloadedFormData"     =>  $this->preloadedFormData,
+            "fieldTypeData"         =>  $this->fieldTypeData,
+            "fieldSettings"         =>  $this->fieldSettings,
+            "fieldTypeSections"     =>  $this->fieldTypeSections,
+            "actionTypeData"        =>  $this->actionTypeData,
+            "actionSettings"        =>  $this->actionSettings,
+            "formSettingTypeData"   =>  $this->formSettingTypeData,
+            "formSettings"          =>  $this->formSettings,
+            "mergeTags"             =>  $this->mergeTags
+        ];
+        wp_localize_script( 'nf-builder', 'nfDashInlineVars', $nfDashInlineVars );
+
+        /*
+        * ONBOARDING
+        */
+
+        if(false !== strpos( apply_filters('nf_onboarding_page_now', ''), 'page=ninja-forms&form_id=' ) ) {
+            wp_enqueue_style( 'nf-onboarding', Ninja_Forms::$url . 'assets/css/nfOnboarding.css' );
+            wp_register_script( 'nf-onboarding', Ninja_Forms::$url . 'assets/js/lib/nfOnboarding.js', array('jquery'), FALSE, TRUE);
+            wp_localize_script( 'nf-onboarding', 'nfOBi18n', Ninja_Forms::config('i18nOnboarding'));
+            wp_enqueue_script( 'nf-onboarding');
+            Ninja_Forms::template( 'admin-onboarding.html.php');
+        }
 
         do_action( 'nf_admin_enqueue_scripts' );
     }
@@ -400,30 +465,6 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
                  * Duplicate field check.
                  * TODO: Replace unique field key checks with a refactored model/factory.
                  */
-//                $field_key = $field->get_setting( 'key' );
-//                if( in_array( $field_key, $unique_field_keys ) || '' == $field_key ){
-//
-//                    // Delete the field.
-//                    Ninja_Forms()->request( 'delete-field' )->data( array( 'field_id' => $field_id ) )->dispatch();
-//
-//                    // Remove the field from cache.
-//                    if( $form_cache ) {
-//                        if( isset( $form_cache[ 'fields' ] ) ){
-//                            foreach( $form_cache[ 'fields' ] as $cached_field_key => $cached_field ){
-//                                if( ! isset( $cached_field[ 'id' ] ) ) continue;
-//                                if( $field_id != $cached_field[ 'id' ] ) continue;
-//
-//                                // Flag cache to update.
-//                                $cache_updated = true;
-//
-//                                unset( $form_cache[ 'fields' ][ $cached_field_key ] ); // Remove the field.
-//                            }
-//                        }
-//                    }
-//
-//                    continue; // Skip the duplicate field.
-//                }
-//                array_push( $unique_field_keys, $field_key ); // Log unique key.
                 /* END Duplicate field check. */
 
                 $type = ( is_object( $field ) ) ? $field->get_setting( 'type' ) : $field[ 'settings' ][ 'type' ];
@@ -445,13 +486,11 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
                 $settings[ 'id' ] =  $field_id;
 
                 $settings = $this->null_data_check( $settings );
+                $settings = $this->sanitizeFieldSettings($settings);
 
                 $fields_settings[] = $settings;
             }
 
-//            if( $cache_updated ) {
-//                update_option('nf_form_' . $form_id, $form_cache); // Update form cache without duplicate fields.
-//            }
         }
 
         $actions_settings = array();
@@ -491,12 +530,9 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
         $form_data['fields'] = $fields_settings;
         $form_data['actions'] = $actions_settings;
 
-        ?>
-        <script>
-            var preloadedFormData = <?php echo wp_json_encode( $form_data ); ?>;
-            // console.log( preloadedFormData );
-        </script>
-        <?php
+        // This step remove the <script> that sets inline vars we then use the $this variables into wp_localize_script
+        $this->preloadedFormData = $form_data;
+
     }
 
     /**
@@ -518,6 +554,34 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
             }
         }
         return $settings;
+    }
+
+    /**
+     * Sanitize any field setting that can cause vulnerabilities
+     *
+     * @param array $fieldSettings
+     * @return array
+     */
+    private function sanitizeFieldSettings(array $fieldSettings): array
+    {
+        $return = $fieldSettings;
+
+        $return['label']=$this->removeScriptTriggers( $fieldSettings['label']);
+
+        return $return;
+    }
+
+    /**
+     * Remove known script triggers that can be output on screen
+     *
+     * @param string $string
+     * @return string
+     */
+    private function removeScriptTriggers(string $string): string
+    {
+        $return =wp_kses_post( NinjaForms\Includes\Handlers\Sanitizer::preventScriptTriggerInHtmlOutput($string));
+
+        return $return;
     }
 
     private function _localize_field_type_data()
@@ -611,20 +675,19 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
             $field_type_settings[ $id ][ 'section' ] = 'saved';
 
             $defaults = $field_type_settings[ $id ][ 'settingDefaults' ];
-            $defaults = array_merge( $defaults, $settings );
+            if(is_array($defaults)){
+                $defaults = array_merge( $defaults, $settings );
+            }
             $defaults[ 'saved' ] = TRUE;
 
             $field_type_settings[ $id ][ 'settingDefaults' ] = $defaults;
         }
 
-        ?>
-        <script>
-            var fieldTypeData     = <?php echo wp_json_encode( array_values( $field_type_settings ) ); ?>;
-            var fieldSettings     = <?php echo wp_json_encode( array_values( $master_settings ) ); ?>;
-            var fieldTypeSections = <?php echo wp_json_encode( $field_type_sections ); ?>;
-            // console.log( fieldTypeData );
-        </script>
-        <?php
+        // This step remove the <script> that sets inline vars we then use the $this variables into wp_localize_script
+        $this->fieldTypeData = array_values( $field_type_settings );
+        $this->fieldSettings = array_values( $master_settings );
+        $this->fieldTypeSections = $field_type_sections;
+
     }
 
     private function _localize_action_type_data()
@@ -646,6 +709,8 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
             $action_type_settings[ $name ] = array(
                 'id' => $name,
                 'section' => $action->get_section(),
+                'docUrl' => $action->get_doc_url(),
+                'group' => $action->get_group(),
                 'nicename' => $action->get_nicename(),
                 'image' => $action->get_image(),
                 'settingGroups' => $settings_groups,
@@ -699,13 +764,10 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
 
         $action_type_settings = apply_filters( 'ninja_forms_action_type_settings', $action_type_settings );
 
-        ?>
-        <script>
-            var actionTypeData = <?php echo wp_json_encode( array_values( $action_type_settings ) ); ?>;
-            var actionSettings = <?php echo wp_json_encode( array_values( $master_settings_list ) ); ?>;
-            // console.log( actionTypeData );
-        </script>
-        <?php
+        // This step remove the <script> that sets inline vars we then use the $this variables into wp_localize_script
+        $this->actionTypeData = array_values( $action_type_settings );
+        $this->actionSettings = array_values( $master_settings_list );
+
     }
 
     protected function _localize_form_settings()
@@ -758,12 +820,11 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
                 'settingDefaults' => array()
             );
         }
-        ?>
-        <script>
-        var formSettingTypeData = <?php echo wp_json_encode( array_values( $form_settings_types ) )?>;
-        var formSettings = <?php echo wp_json_encode( array_values( $master_settings ) )?>;
-        </script>
-        <?php
+
+        // This step remove the <script> that sets inline vars we then use the $this variables into wp_localize_script
+        $this->formSettingTypeData = array_values( $form_settings_types );
+        $this->formSettings = array_values( $master_settings );
+
     }
 
     protected function _localize_merge_tags()
@@ -792,11 +853,9 @@ final class NF_Admin_Menus_Forms extends NF_Abstracts_Menu
                 'default_group' => $group->is_default_group()
             );
         }
-        ?>
-        <script>
-            var mergeTags = <?php echo wp_json_encode( array_values( $merge_tags ) ); ?>;
-        </script>
-        <?php
+
+        $this->mergeTags = array_values( $merge_tags );
+
     }
 
 

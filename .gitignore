@@ -1,0 +1,17 @@
+# Database backups
+*.sql
+*.sql.gz
+
+# DDEV
+.ddev/.gitignore
+.ddev/homeadditions
+.ddev/traefik
+
+# WordPress uploads (large media files)
+public/wp-content/uploads/
+
+# WordPress cache
+public/wp-content/cache/
+
+# WordPress debug log
+public/wp-content/debug.log

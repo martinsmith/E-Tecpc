@@ -135,8 +135,4 @@ class Ai1wmde_Import_Controller {
 		echo json_encode( array( 'items' => array_reverse( $items ), 'cursor' => null ) );
 		exit;
 	}
-
-	public static function pro() {
-		return Ai1wm_Template::get_content( 'import/pro', array(), AI1WMDE_TEMPLATES_PATH );
-	}
 }
