@@ -32,7 +32,7 @@
 	  "@context" : "http://schema.org",
 	  "@type" : "LocalBusiness",
 	  "name" : "e-tec Computer Services",
-	  "telephone" : "0845 475 1335",
+	  "telephone" : "07977 697099",
 	  "email" : "support@e-tecpc.co.uk",
 	  "address" : {
 	    "@type" : "PostalAddress",
